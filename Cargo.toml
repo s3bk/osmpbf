@@ -21,7 +21,8 @@ zlib-ng = ["flate2/zlib-ng"]
 byteorder = "1.4"
 flate2 = { version = "1.0", default-features = false }
 memmap2 = "0.5"
-protobuf = "3.1"
+prost = "0.14"
+prost-types = "0.14"
 rayon = "1.5"
 
 [dev-dependencies]
@@ -29,7 +30,7 @@ assert_approx_eq = "1.1.0"
 criterion = { version = "0.3", features = ["html_reports"] }
 
 [build-dependencies]
-protobuf-codegen = "3.1"
+prost-build = "0.14"
 
 [[bench]]
 name = "counter_bench"

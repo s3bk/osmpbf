@@ -3,10 +3,8 @@
 use crate::block::{get_stringtable_key_value, str_from_stringtable};
 use crate::dense::DenseNode;
 use crate::error::Result;
-use crate::proto::osmformat;
-use crate::proto::osmformat::PrimitiveBlock;
-use osmformat::relation::MemberType;
-use protobuf::EnumOrUnknown;
+use crate::proto as osmformat;
+use osmformat::PrimitiveBlock;
 
 /// An enum with the OSM core elements: nodes, ways and relations.
 #[derive(Clone, Debug)]
@@ -41,7 +39,7 @@ impl<'a> Node<'a> {
     /// Returns the node id. It should be unique between nodes and might be negative to indicate
     /// that the element has not yet been uploaded to a server.
     pub fn id(&self) -> i64 {
-        self.osmnode.id()
+        self.osmnode.id
     }
 
     /// Returns an iterator over the tags of this node
@@ -77,7 +75,7 @@ impl<'a> Node<'a> {
 
     /// Returns additional metadata for this element.
     pub fn info(&self) -> Info<'a> {
-        Info::new(self.block, self.osmnode.info.get_or_default())
+        Info::new(self.block, self.osmnode.info.as_ref())
     }
 
     /// Returns the latitude coordinate in degrees.
@@ -87,7 +85,7 @@ impl<'a> Node<'a> {
 
     /// Returns the latitude coordinate in nanodegrees (10⁻⁹).
     pub fn nano_lat(&self) -> i64 {
-        self.block.lat_offset() + i64::from(self.block.granularity()) * self.osmnode.lat()
+        self.block.lat_offset() + i64::from(self.block.granularity()) * self.osmnode.lat
     }
 
     /// Returns the latitude coordinate in decimicrodegrees (10⁻⁷).
@@ -102,7 +100,7 @@ impl<'a> Node<'a> {
 
     /// Returns the longitude in nanodegrees (10⁻⁹).
     pub fn nano_lon(&self) -> i64 {
-        self.block.lon_offset() + i64::from(self.block.granularity()) * self.osmnode.lon()
+        self.block.lon_offset() + i64::from(self.block.granularity()) * self.osmnode.lon
     }
 
     /// Returns the longitude coordinate in decimicrodegrees (10⁻⁷).
@@ -147,7 +145,7 @@ impl<'a> Way<'a> {
 
     /// Returns the way id.
     pub fn id(&self) -> i64 {
-        self.osmway.id()
+        self.osmway.id
     }
 
     /// Returns an iterator over the tags of this way
@@ -183,7 +181,7 @@ impl<'a> Way<'a> {
 
     /// Returns additional metadata for this element.
     pub fn info(&self) -> Info<'a> {
-        Info::new(self.block, self.osmway.info.get_or_default())
+        Info::new(self.block, self.osmway.info.as_ref())
     }
 
     /// Returns an iterator over the references of this way. Each reference should correspond to a
@@ -256,7 +254,7 @@ impl<'a> Relation<'a> {
 
     /// Returns the relation id.
     pub fn id(&self) -> i64 {
-        self.osmrel.id()
+        self.osmrel.id
     }
 
     /// Returns an iterator over the tags of this relation
@@ -292,7 +290,7 @@ impl<'a> Relation<'a> {
 
     /// Returns additional metadata for this element.
     pub fn info(&self) -> Info<'a> {
-        Info::new(self.block, self.osmrel.info.get_or_default())
+        Info::new(self.block, self.osmrel.info.as_ref())
     }
 
     /// Returns an iterator over the members of this relation.
@@ -430,12 +428,14 @@ pub enum RelMemberType {
     Relation,
 }
 
-impl From<EnumOrUnknown<MemberType>> for RelMemberType {
-    fn from(rmt: EnumOrUnknown<MemberType>) -> RelMemberType {
-        match rmt.unwrap() {
-            MemberType::NODE => RelMemberType::Node,
-            MemberType::WAY => RelMemberType::Way,
-            MemberType::RELATION => RelMemberType::Relation,
+impl From<i32> for RelMemberType {
+    fn from(rmt: i32) -> RelMemberType {
+        use osmformat::relation::MemberType;
+
+        match MemberType::try_from(rmt).unwrap() {
+            MemberType::Node => RelMemberType::Node,
+            MemberType::Way => RelMemberType::Way,
+            MemberType::Relation => RelMemberType::Relation,
         }
     }
 }
@@ -465,7 +465,7 @@ pub struct RelMemberIter<'a> {
     block: &'a PrimitiveBlock,
     role_sids: std::slice::Iter<'a, i32>,
     member_id_deltas: std::slice::Iter<'a, i64>,
-    member_types: std::slice::Iter<'a, EnumOrUnknown<MemberType>>,
+    member_types: std::slice::Iter<'a, i32>,
     current_member_id: i64,
 }
 
@@ -567,55 +567,51 @@ impl ExactSizeIterator for RawTagIter<'_> {}
 #[derive(Clone, Debug)]
 pub struct Info<'a> {
     block: &'a PrimitiveBlock,
-    info: &'a osmformat::Info,
+    info: Option<&'a osmformat::Info>,
 }
 
 impl<'a> Info<'a> {
-    fn new(block: &'a PrimitiveBlock, info: &'a osmformat::Info) -> Info<'a> {
+    fn new(block: &'a PrimitiveBlock, info: Option<&'a osmformat::Info>) -> Info<'a> {
         Info { block, info }
     }
 
     /// Returns the version of this element.
     pub fn version(&self) -> Option<i32> {
-        self.info.version
+        self.info?.version
     }
 
     /// Returns the time stamp in milliseconds since the epoch.
     pub fn milli_timestamp(&self) -> Option<i64> {
-        if self.info.has_timestamp() {
-            Some(self.info.timestamp() * i64::from(self.block.date_granularity()))
-        } else {
-            None
-        }
+        Some(self.info?.timestamp? * i64::from(self.block.date_granularity?))
     }
 
     /// Returns the changeset id.
     pub fn changeset(&self) -> Option<i64> {
-        self.info.changeset
+        self.info?.changeset
     }
 
     /// Returns the user id.
     pub fn uid(&self) -> Option<i32> {
-        self.info.uid
+        self.info?.uid
     }
 
     /// Returns the user name.
     pub fn user(&self) -> Option<Result<&'a str>> {
-        if self.info.has_user_sid() {
-            Some(str_from_stringtable(
-                self.block,
-                self.info.user_sid() as usize,
-            ))
-        } else {
-            None
-        }
+        let uid: u32 = self.info?.user_sid?;
+        Some(str_from_stringtable(
+            self.block,
+            uid as usize
+        ))
     }
 
     /// Returns the visibility status of an element. This is only relevant if the PBF file contains
     /// historical information.
     pub fn visible(&self) -> bool {
         // If the visible flag is not present it must be assumed to be true.
-        self.info.visible.unwrap_or(true)
+        match self.info {
+            None => true,
+            Some(info) => info.visible.unwrap_or(true)
+        }
     }
 
     /// Returns true if the element was deleted.

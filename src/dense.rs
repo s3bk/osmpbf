@@ -2,7 +2,7 @@
 
 use crate::block::{get_stringtable_key_value, str_from_stringtable};
 use crate::error::Result;
-use crate::proto::osmformat;
+use crate::proto as osmformat;
 use std;
 
 //TODO Add getter functions for id, version, uid, ...
@@ -101,9 +101,9 @@ impl<'a> DenseNodeIter<'a> {
         block: &'a osmformat::PrimitiveBlock,
         osmdense: &'a osmformat::DenseNodes,
     ) -> DenseNodeIter<'a> {
-        let info_iter = Some(DenseNodeInfoIter::new(
+        let info_iter = osmdense.denseinfo.as_ref().map(|info| DenseNodeInfoIter::new(
             block,
-            osmdense.denseinfo.get_or_default(),
+            info,
         ));
         DenseNodeIter {
             block,
@@ -116,6 +116,16 @@ impl<'a> DenseNodeIter<'a> {
             keys_vals_slice: osmdense.keys_vals.as_slice(),
             keys_vals_index: 0,
             info_iter,
+        }
+    }
+
+    pub(crate) fn new_opt(
+        block: &'a osmformat::PrimitiveBlock,
+        osmdense: Option<&'a osmformat::DenseNodes>,
+    ) -> DenseNodeIter<'a> {
+        match osmdense {
+            Some(dense) => Self::new(block, dense),
+            None => Self::empty(block)
         }
     }
 

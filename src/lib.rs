@@ -80,6 +80,7 @@ pub use elements::*;
 pub use error::{BlobError, Error, ErrorKind, Result};
 pub use indexed::*;
 pub use mmap_blob::*;
+use prost::Message;
 pub use reader::*;
 
 pub mod blob;
@@ -92,5 +93,13 @@ pub mod mmap_blob;
 pub mod reader;
 
 mod proto {
-    include!(concat!(env!("OUT_DIR"), "/mod.rs"));
+    include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
+}
+
+
+fn decode_reader<T: Message + Default>(reader: impl std::io::Read, limit: usize, location: &'static str) -> Result<T> {
+    use std::io::Read;
+    let mut buf = Vec::with_capacity(limit);
+    reader.take(limit as u64).read_to_end(&mut buf)?;
+    T::decode(&*buf).map_err(|e| error::new_protobuf_error(e, location))
 }

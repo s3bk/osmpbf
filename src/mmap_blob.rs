@@ -1,13 +1,14 @@
 //! Iterate over blobs from a memory map
 
-use self::fileformat::BlobHeader;
+use crate::proto::BlobHeader;
 use crate::blob::{decode_blob, BlobDecode, BlobType, ByteOffset};
 use crate::block::{HeaderBlock, PrimitiveBlock};
 use crate::error::{new_blob_error, new_protobuf_error, BlobError, Result};
-use crate::proto::{fileformat, osmformat};
+use crate::proto as fileformat;
+use crate::proto as osmformat;
 use crate::MAX_BLOB_HEADER_SIZE;
 use byteorder::ByteOrder;
-use protobuf::Message;
+use prost::Message;
 use std::fs::File;
 use std::path::Path;
 
@@ -88,9 +89,9 @@ impl<'a> MmapBlob<'a> {
     /// Decodes the blob and tries to obtain the inner content (usually a [`HeaderBlock`] or a
     /// [`PrimitiveBlock`]). This operation might involve an expensive decompression step.
     pub fn decode(&'a self) -> Result<BlobDecode<'a>> {
-        let blob = fileformat::Blob::parse_from_bytes(self.data)
+        let blob = fileformat::Blob::decode(self.data)
             .map_err(|e| new_protobuf_error(e, "blob content"))?;
-        match self.header.type_() {
+        match self.header.r#type.as_str() {
             "OSMHeader" => {
                 let block = Box::new(HeaderBlock::new(decode_blob(&blob)?));
                 Ok(BlobDecode::OsmHeader(block))
@@ -105,7 +106,7 @@ impl<'a> MmapBlob<'a> {
 
     /// Returns the type of a blob without decoding its content.
     pub fn get_type(&self) -> BlobType<'_> {
-        match self.header.type_() {
+        match self.header.r#type.as_str() {
             "OSMHeader" => BlobType::OsmHeader,
             "OSMData" => BlobType::OsmData,
             x => BlobType::Unknown(x),
@@ -211,7 +212,7 @@ impl<'a> Iterator for MmapBlobReader<'a> {
             return Some(Err(io_error.into()));
         }
 
-        let header = match BlobHeader::parse_from_bytes(&slice[4..(4 + header_size)]) {
+        let header: BlobHeader = match BlobHeader::decode(&slice[4..(4 + header_size)]) {
             Ok(x) => x,
             Err(e) => {
                 self.last_blob_ok = false;
@@ -219,7 +220,7 @@ impl<'a> Iterator for MmapBlobReader<'a> {
             }
         };
 
-        let data_size = header.datasize() as usize;
+        let data_size = header.datasize as usize;
         let chunk_size = 4 + header_size + data_size;
 
         if slice.len() < chunk_size {
